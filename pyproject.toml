@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "disconcept"
+version = "0.1.0"
+description = "Automatic Concept Discovery by MST"
+authors = ["RenChu Wang <patrick1031wang@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
