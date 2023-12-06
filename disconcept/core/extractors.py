@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import loguru
 from sentence_transformers import SentenceTransformer
@@ -37,7 +37,7 @@ class RelationExtractor:
             text, max_length=512, padding=True, truncation=True, return_tensors="pt"
         )
 
-    def transform(self, encoded: Mapping[str, Tensor]) -> Tensor:
+    def transform(self, encoded: Any) -> Tensor:
         kwargs = {
             "max_length": 512,
             "length_penalty": 0,

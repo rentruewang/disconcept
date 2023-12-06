@@ -117,11 +117,9 @@ class Graph:
 
 class GnnOutput(NamedTuple):
     output: Tensor
-    direct: Tensor
     pooler: Tensor
     loss: Tensor
-    acc_gcn: float
-    acc_lin: float
+    acc: float
 
 
 class Gnn(Module):
@@ -134,13 +132,12 @@ class Gnn(Module):
         self.norm = BatchNorm1d(num_features=_EMBED_DIM * 3)
         self.gcn1 = GATConv(in_channels=_EMBED_DIM * 3, out_channels=_EMBED_DIM)
         self.gcn2 = GATConv(in_channels=_EMBED_DIM * 4, out_channels=_EMBED_DIM)
-        self.pool_gcn = Linear(in_features=_EMBED_DIM, out_features=features)
+        self.pooler = Linear(in_features=_EMBED_DIM, out_features=features)
 
         self.direct = Linear(in_features=_EMBED_DIM * 3, out_features=features)
 
         self.loss_fn = CrossEntropyLoss(ignore_index=_IGNORE)
         self.assign = assignment
-        self.activation = lambda x: x
         self.float().to(_DEVICE)
 
     def forward(self) -> GnnOutput:
@@ -155,10 +152,8 @@ class Gnn(Module):
 
         direct = self.direct(x)
         out = self.gcn1(x, edge_index)
-        out = self.activation(out)
         out = self.gcn2(torch.cat([out, x], dim=-1), edge_index)
-        out = self.activation(out)
-        pooler = self.pool_gcn(out)
+        pooler = self.pooler(out)
         assert pooler.shape == direct.shape
 
         # Filtering.
@@ -171,20 +166,12 @@ class Gnn(Module):
         loss = self.loss_fn(ps, ts) + self.loss_fn(ds, ts)
 
         with torch.no_grad():
-            acc_gcn = (ps.argmax(-1) == ts).sum().item() / self.graph.num_subs
-            acc_lin = (ds.argmax(-1) == ts).sum().item() / self.graph.num_subs
+            acc = (ps.argmax(-1) == ts).sum().item() / self.graph.num_subs
 
-        return GnnOutput(
-            output=out,
-            direct=direct,
-            pooler=pooler,
-            loss=loss,
-            acc_gcn=acc_gcn,
-            acc_lin=acc_lin,
-        )
+        return GnnOutput(output=out, pooler=pooler, loss=loss, acc=acc)
 
     @classmethod
-    def train(cls, graph: Graph, assignment: dict[str, int], *, cfg: DictConfig):
+    def training(cls, graph: Graph, assignment: dict[str, int], *, cfg: DictConfig):
         epochs = int(cfg["ml"]["epochs"])
         lr = float(cfg["ml"]["lr"])
         moving_avg = int(cfg["ml"]["moving_avg"])
@@ -194,11 +181,11 @@ class Gnn(Module):
 
         optimizer = Adam(gnn.parameters(), lr=lr)
 
-        acc_gcn = None
-        past_acc_gcn = collections.deque()
+        acc = None
+        moving_average_queue = collections.deque()
         for epoch in prog.alive_it(range(epochs)):
-            if len(past_acc_gcn) >= moving_avg:
-                past_acc_gcn.popleft()
+            if len(moving_average_queue) >= moving_avg:
+                moving_average_queue.popleft()
 
             output: GnnOutput = gnn()
 
@@ -207,14 +194,15 @@ class Gnn(Module):
             optimizer.step()
 
             # Early stopping.
+            assert acc is not None
             if (
                 epoch > (moving_avg + 1)
-                and abs(sum(past_acc_gcn) / len(past_acc_gcn) - acc_gcn) < 1e-6
+                and abs(sum(moving_average_queue) / len(moving_average_queue) - acc)
+                < 1e-6
             ):
                 break
 
             # Storing the outputs for the final returns.
-            acc_gcn = output.acc_gcn
-            acc_lin = output.acc_lin
-            past_acc_gcn.append(acc_gcn)
-        return {"acc_gcn": acc_gcn, "acc_lin": acc_lin, "classes": classes}
+            acc = output.acc
+            moving_average_queue.append(acc)
+        return {"acc_gcn": acc, "classes": classes}

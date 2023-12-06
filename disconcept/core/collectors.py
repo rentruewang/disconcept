@@ -43,7 +43,7 @@ class GoogleNewsCollector:
         words = []
         bar = prog.alive_it(links)
         for link in bar:
-            bar.text = f"document processing {link}"
+            bar.text = f"document processing {link}"  # type: ignore
             try:
                 out = self.keywords(link)
                 words.extend(out)
@@ -87,11 +87,13 @@ class WikipediaAugmenter:
         def gen():
             bar = prog.alive_it(texts)
             for item in bar:
-                bar.text = f"augmenting texts: {item}"
+                bar.text = f"augmenting texts: {item}"  # type: ignore
                 yield item
 
-        return Parallel(n_jobs=self._processes, backend="threading")(
-            delayed(self.augment_one)(t) for t in gen()
+        return list(  # type: ignore
+            Parallel(n_jobs=self._processes, backend="threading")(
+                delayed(self.augment_one)(t) for t in gen()
+            )
         )
 
     def augment_one(self, text: str) -> str:

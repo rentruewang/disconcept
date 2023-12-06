@@ -3,10 +3,10 @@ from __future__ import annotations
 import itertools
 
 import numpy as np
-from alive_progress import alive_it
 from loguru import logger
 from numpy.typing import NDArray
 from scipy import optimize
+from tqdm import tqdm
 
 from .contexts import Context
 
@@ -77,7 +77,7 @@ class ThresholdMST:
         relations = [np.array([r.emb for r in ctx.rel]) for ctx in self.contexts]
         objects = [np.array([r.emb for r in ctx.obj]) for ctx in self.contexts]
 
-        for i, j in alive_it(itertools.product(range(l), range(l)), total=l * l):
+        for i, j in tqdm(itertools.product(range(l), range(l)), total=l * l):
             if i > j:
                 continue
 

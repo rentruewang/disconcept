@@ -1,6 +1,6 @@
 import pickle
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import hydra
 import loguru
@@ -30,7 +30,7 @@ def main(cfg: DictConfig):
         pickle.dump(result, f)
 
 
-def _load_cache_or_run(path: Path, func: Callable[[], None]):
+def _load_cache_or_run(path: Path, func: Callable[[], Any]):
     if path.exists():
         _LOGGER.warning(f"loading from {path}")
         with open(path, "rb") as f:
@@ -55,7 +55,7 @@ def run(threshold: float, cfg: DictConfig):
     _LOGGER.warning("Performing downloading...")
 
     # Lazily download data if cache is not found.
-    download = lambda: Downloader().download(keyword=keyword, limit=limit)
+    download = lambda: Downloader().download(keyword, limit=limit)
     retrieved_data = _load_cache_or_run(retrieval_dump, download)
 
     mst = ThresholdMST(retrieved_data)
@@ -77,7 +77,7 @@ def run(threshold: float, cfg: DictConfig):
     _LOGGER.info(f"number of objects: {len(graph._objects)}")
 
     _LOGGER.info(f"number of contexts: {len(graph.contexts)}")
-    return Gnn.train(graph, assignment, cfg=cfg)
+    return Gnn.training(graph, assignment, cfg=cfg)
 
 
 if __name__ == "__main__":
