@@ -125,6 +125,9 @@ GnnOutput = collections.namedtuple(
 class Gnn(Module):
     def __init__(self, graph: Graph, assignment: Dict[str, int]) -> None:
         super().__init__()
+
+        features = len(set(assignment.values()))
+
         self.graph = graph
         self.norm = BatchNorm1d(num_features=self.graph.embed_dim * 3)
         self.gcn1 = GATConv(
@@ -138,8 +141,6 @@ class Gnn(Module):
         self.direct = Linear(
             in_features=self.graph.embed_dim * 3, out_features=features
         )
-
-        features = len(np.unique(list(assignment.values())))
 
         self.loss_fn = CrossEntropyLoss(ignore_index=-100)
         self.assign = assignment

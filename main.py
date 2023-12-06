@@ -1,5 +1,6 @@
 import pickle
 from pathlib import Path
+from typing import Callable
 
 import hydra
 import loguru
@@ -25,6 +26,21 @@ def main(cfg: DictConfig):
         pickle.dump(result, f)
 
 
+def _load_cache_or_run(path: Path, func: Callable[[], None]):
+    if path.exists():
+        _LOGGER.warning(f"loading from {path}")
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    result = func()
+
+    with open(path, "wb+") as f:
+        _LOGGER.warning(f"dumping to {path}")
+        pickle.dump(result, f)
+
+    return result
+
+
 def run(threshold: float, cfg: DictConfig):
     retrieval_dump = Path(cfg["dumps"]["retrieval"])
     similarity_dump = Path(cfg["dumps"]["similarity"])
@@ -32,30 +48,19 @@ def run(threshold: float, cfg: DictConfig):
     limit = int(cfg["download"]["limit"])
     keyword = cfg["download"]["keyword"]
 
-    if retrieval_dump.exists():
-        _LOGGER.warning("loading retrieval from cache")
-        with open(retrieval_dump, "rb") as f:
-            retrieved_data = pickle.load(f)
-    else:
-        _LOGGER.warning("Downloading data from the internet")
-        main = Downloader()
-        retrieved_data = main.download(keyword, limit=limit)
+    _LOGGER.warning("Performing downloading...")
 
-        with open(retrieval_dump, "wb+") as f:
-            pickle.dump(retrieved_data, f)
-
-        print(len(retrieved_data))
+    # Lazily download data if cache is not found.
+    download = lambda: Downloader().download(keyword=keyword, limit=limit)
+    retrieved_data = _load_cache_or_run(retrieval_dump, download)
 
     mst = ThresholdMST(retrieved_data)
-    if similarity_dump.exists():
-        _LOGGER.warning("loading similarity from cache")
-        with open(similarity_dump, "rb") as f:
-            similarity = pickle.load(f)
-        mst.similarity = similarity
-    else:
-        # Evaluate it first, then it would be cached.
-        _LOGGER.info("running mst...")
-        _ = mst.similarity
+
+    _LOGGER.warning("Computing similarity...")
+
+    # Lazily compute MST if cache is not found.
+    comp_sim = lambda: mst.similarity
+    mst.similarity = _load_cache_or_run(similarity_dump, comp_sim)
 
     _LOGGER.info("grouping...")
     assignment = mst.group(threshold)
