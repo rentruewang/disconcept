@@ -1,0 +1,10 @@
+dumps:
+  retrieval: retrieval_dump.pkl
+  similarity: sim_dump.pkl
+  results: threshold_results.pkl
+ml:
+  lr: 0.003
+  epochs: 2000
+download:
+  keyword: dio
+  limit: 3000
