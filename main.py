@@ -16,8 +16,12 @@ _LOGGER = loguru.logger
 def main(cfg: DictConfig):
     results = Path(cfg["dumps"]["results"])
 
+    start = int(cfg["linspace"]["start"])
+    stop = int(cfg["linspace"]["stop"])
+    points = int(cfg["linspace"]["points"])
+
     result = {}
-    for threshold in reversed(np.linspace(0, 10, 100)):
+    for threshold in reversed(np.linspace(start, stop, points)):
         _LOGGER.warning(f"threshold = {threshold}")
         result[threshold] = run(threshold, cfg=cfg)
         _LOGGER.warning(f"result = {result[threshold]}")

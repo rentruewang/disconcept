@@ -9,3 +9,7 @@ ml:
 download:
   keyword: dio
   limit: 3000
+linspace:
+  start: 0
+  stop: 10
+  points: 100
