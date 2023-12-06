@@ -2,23 +2,25 @@ from __future__ import annotations
 
 import collections
 import functools
-from typing import Dict
+from typing import Dict, NamedTuple
 
 import alive_progress as prog
 import numpy as np
 import torch
 from numpy.typing import NDArray
-from torch import cuda
+from omegaconf import DictConfig
+from torch import Tensor, cuda
 from torch.nn import BatchNorm1d, CrossEntropyLoss, Linear, Module
+from torch.optim import Adam
 from torch_geometric.nn import GATConv
 
 from .contexts import Context
 
-DEVICE = "cuda" if cuda.is_available() else "cpu"
+_DEVICE = "cuda" if cuda.is_available() else "cpu"
 
 
 class Graph:
-    def __init__(self, contexts: list[Context]) -> None:
+    def __init__(self, contexts: list[Context], device: str = None) -> None:
         self.contexts = contexts
 
         subject_set = set(c.sub.text for c in contexts)
@@ -106,7 +108,18 @@ class Graph:
         )
 
 
-GnnOutput = collections.namedtuple("GnnOutput", ["output", "pooler", "loss", "acc"])
+class GnnOutput(NamedTuple):
+    output: Tensor
+    direct: Tensor
+    pooler: Tensor
+    loss: Tensor
+    acc_gcn: float
+    acc_lin: float
+
+
+GnnOutput = collections.namedtuple(
+    "GnnOutput", ["output", "direct", "pooler", "loss", "acc"]
+)
 
 
 class Gnn(Module):
@@ -120,39 +133,91 @@ class Gnn(Module):
         self.gcn2 = GATConv(
             in_channels=self.graph.embed_dim * 4, out_channels=self.graph.embed_dim
         )
-        # self.gcn3 = GATConv(
-        #     in_channels=self.graph.embed_dim, out_channels=self.graph.embed_dim
-        # )
+        self.pool_gcn = Linear(in_features=self.graph.embed_dim, out_features=features)
+
+        self.direct = Linear(
+            in_features=self.graph.embed_dim * 3, out_features=features
+        )
+
         features = len(np.unique(list(assignment.values())))
-        self.pool = Linear(in_features=self.graph.embed_dim, out_features=features)
+
         self.loss_fn = CrossEntropyLoss(ignore_index=-100)
         self.assign = assignment
         self.activation = lambda x: x
-        self.float().to(DEVICE)
+        self.float().to(_DEVICE)
 
     def forward(self) -> GnnOutput:
-        x = torch.from_numpy(self.graph.x).float().to(DEVICE)
-        edge_index = torch.from_numpy(self.graph.edge_index).T.long().to(DEVICE)
-        target = torch.from_numpy(self.graph.group_index(self.assign)).long().to(DEVICE)
+        x = torch.from_numpy(self.graph.x).float().to(_DEVICE)
+        edge_index = torch.from_numpy(self.graph.edge_index).T.long().to(_DEVICE)
+        target = (
+            torch.from_numpy(self.graph.group_index(self.assign)).long().to(_DEVICE)
+        )
 
         assert edge_index.shape[0] == 2
         x = self.norm(x)
+
+        direct = self.direct(x)
         out = self.gcn1(x, edge_index)
         out = self.activation(out)
         out = self.gcn2(torch.cat([out, x], dim=-1), edge_index)
         out = self.activation(out)
-        # out = self.gcn3(out, edge_index)
-        # out = self.activation(out)
 
-        pooler = self.pool(out)
+        pooler = self.pool_gcn(out)
 
         subjects = target >= 0
 
+        assert pooler.shape == direct.shape
+
+        ds = direct[subjects]
         ps = pooler[subjects]
         ts = target[subjects]
-        loss = self.loss_fn(ps, ts)
-        # assert torch.all(ts == 0), [ts[ts != 0]]
-        # assert torch.all(ps.argmax(-1) == ts), [ps[ps.argmax(-1) != ts]]
-        acc = (ps.argmax(-1) == ts).sum().item() / subjects.sum().item()
 
-        return GnnOutput(output=out, pooler=pooler, loss=loss, acc=acc)
+        loss = self.loss_fn(ps, ts) + self.loss_fn(ds, ts)
+
+        with torch.no_grad():
+            acc_gcn = (ps.argmax(-1) == ts).sum().item() / subjects.sum().item()
+            acc_lin = (ds.argmax(-1) == ts).sum().item() / subjects.sum().item()
+
+        return GnnOutput(
+            output=out,
+            direct=direct,
+            pooler=pooler,
+            loss=loss,
+            acc_gcn=acc_gcn,
+            acc_lin=acc_lin,
+        )
+
+    @classmethod
+    def train(cls, graph: Graph, assignment: dict[str, int], *, cfg: DictConfig):
+        epochs = int(cfg["ml"]["epochs"])
+        lr = float(cfg["ml"]["lr"])
+        moving_avg = int(cfg["ml"]["moving_avg"])
+
+        gnn = cls(graph, assignment=assignment)
+        classes = len(np.unique(list(assignment.values())))
+
+        optimizer = Adam(gnn.parameters(), lr=lr)
+
+        acc_gcn = None
+        past_acc_gcn = collections.deque()
+        for epoch in prog.alive_it(range(epochs)):
+            if len(past_acc_gcn) >= moving_avg:
+                past_acc_gcn.popleft()
+
+            output: GnnOutput = gnn()
+
+            optimizer.zero_grad()
+            output.loss.backward()
+            optimizer.step()
+
+            # Early stopping.
+            if (
+                epoch > (moving_avg + 1)
+                and abs(sum(past_acc_gcn) / len(past_acc_gcn) - acc_gcn) < 1e-6
+            ):
+                break
+
+            acc_gcn = output.acc_gcn
+            acc_lin = output.acc_lin
+            past_acc_gcn.append(acc_gcn)
+        return {"acc_gcn": acc_gcn, "acc_lin": acc_lin, "classes": classes}

@@ -5,6 +5,7 @@ dumps:
 ml:
   lr: 0.003
   epochs: 2000
+  moving_avg: 100
 download:
   keyword: dio
   limit: 3000

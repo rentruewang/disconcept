@@ -85,7 +85,7 @@ class WikipediaAugmenter:
 
     def augment_in_parallel(self, texts: list[str]) -> list[str]:
         def gen():
-            bar = alive_it(texts)
+            bar = prog.alive_it(texts)
             for item in bar:
                 bar.text = f"augmenting texts: {item}"
                 yield item

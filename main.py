@@ -1,13 +1,10 @@
-import collections
 import pickle
 from pathlib import Path
 
-import alive_progress as prog
 import hydra
 import loguru
 import numpy as np
 from omegaconf import DictConfig
-from torch.optim import Adam
 
 from disconcept import Downloader, Gnn, Graph, ThresholdMST
 
@@ -16,7 +13,7 @@ _LOGGER = loguru.logger
 
 @hydra.main(version_base=None, config_path="conf", config_name="main")
 def main(cfg: DictConfig):
-    results = Path(cfg["paths"]["results"])
+    results = Path(cfg["dumps"]["results"])
 
     result = {}
     for threshold in reversed(np.linspace(0, 10, 100)):
@@ -29,11 +26,8 @@ def main(cfg: DictConfig):
 
 
 def run(threshold: float, cfg: DictConfig):
-    epochs = int(cfg["ml"]["epochs"])
-    lr = float(cfg["ml"]["lr"])
-
-    retrieval_dump = Path(cfg["paths"]["retrieval"])
-    similarity_dump = Path(cfg["paths"]["similarity"])
+    retrieval_dump = Path(cfg["dumps"]["retrieval"])
+    similarity_dump = Path(cfg["dumps"]["similarity"])
 
     limit = int(cfg["download"]["limit"])
     keyword = cfg["download"]["keyword"]
@@ -74,32 +68,7 @@ def run(threshold: float, cfg: DictConfig):
     _LOGGER.info(f"number of objects: {len(graph._objects)}")
 
     _LOGGER.info(f"number of contexts: {len(graph.contexts)}")
-    gnn = Gnn(graph, assignment=assignment)
-    # print(gnn)
-    classes = len(np.unique(list(assignment.values())))
-
-    optimizer = Adam(gnn.parameters(), lr=lr)
-
-    acc = None
-    past_acc = collections.deque()
-    for epoch in prog.alive_it(range(epochs)):
-        if len(past_acc) >= 100:
-            past_acc.popleft()
-
-        output = gnn()
-
-        optimizer.zero_grad()
-        output.loss.backward()
-        optimizer.step()
-
-        if epoch > 101 and abs(sum(past_acc) / len(past_acc) - acc) < 1e-6:
-            break
-
-        acc = output.acc
-        past_acc.append(acc)
-        # print(output.loss.item(), output.acc)
-
-    return {"acc": acc, "classes": classes}
+    return Gnn.train(graph, assignment, cfg=cfg)
 
 
 if __name__ == "__main__":
