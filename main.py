@@ -77,7 +77,7 @@ def run(threshold: float, cfg: DictConfig):
     _LOGGER.info(f"number of objects: {len(graph._objects)}")
 
     _LOGGER.info(f"number of contexts: {len(graph.contexts)}")
-    return Gnn.training(graph, assignment, cfg=cfg)
+    return Gnn.experiment(graph, assignment, cfg=cfg)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ from typing import NamedTuple, Protocol, TypeVar, runtime_checkable
 
 from numpy import ndarray
 from numpy.typing import NDArray
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer  # type: ignore
 
 T = TypeVar("T")
 

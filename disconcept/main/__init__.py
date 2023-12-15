@@ -1,3 +1,3 @@
 from __future__ import annotations
 
-from . import collectors, contexts, external, gnn, groups, relations, union_find
+from . import collectors, contexts, external, groups, relations, union_find

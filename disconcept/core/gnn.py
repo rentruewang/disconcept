@@ -171,7 +171,7 @@ class Gnn(Module):
         return GnnOutput(output=out, pooler=pooler, loss=loss, acc=acc)
 
     @classmethod
-    def training(cls, graph: Graph, assignment: dict[str, int], *, cfg: DictConfig):
+    def experiment(cls, graph: Graph, assignment: dict[str, int], *, cfg: DictConfig):
         epochs = int(cfg["ml"]["epochs"])
         lr = float(cfg["ml"]["lr"])
         moving_avg = int(cfg["ml"]["moving_avg"])

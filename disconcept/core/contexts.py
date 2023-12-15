@@ -1,18 +1,13 @@
 from __future__ import annotations
 
 import collections
-from typing import Protocol
 
 import loguru
 
-from .relations import Related, Relation, Subject, WithEmb
+from .relations import Relation, WithEmb
 
 
-class MultiRelation(Subject[WithEmb], Related[list[WithEmb]], Protocol):
-    ...
-
-
-class Context(MultiRelation):
+class Context:
     """
     Context contains a word and all its relations.
     """
@@ -50,6 +45,27 @@ class Context(MultiRelation):
     def obj(self) -> list[WithEmb]:
         return [o for _, o in self._rel_obj_set]
 
+    @classmethod
+    def from_relations(cls, relations: list[Relation]) -> Context:
+        assert len(set(rel.sub.text for rel in relations)) == 1, [
+            rel.sub.text for rel in relations
+        ]
+
+        rel_obj: list[tuple[WithEmb, WithEmb]] = [
+            (rel.rel, rel.obj) for rel in relations
+        ]
+        unique_rel_obj: list[tuple[WithEmb, WithEmb]] = []
+        existed: set[tuple[str, str]] = set()
+
+        for rel, obj in rel_obj:
+            if (rel.text, obj.text) in existed:
+                continue
+
+            existed.add((rel.text, obj.text))
+            unique_rel_obj.append((rel, obj))
+
+        return cls(sub=relations[0].sub, rel_obj_set=unique_rel_obj)
+
 
 def relations_to_contexts(relations: list[Relation]) -> list[Context]:
     loguru.logger.info(f"Converting relations of size {len(relations)}")
@@ -58,23 +74,4 @@ def relations_to_contexts(relations: list[Relation]) -> list[Context]:
     for rel in relations:
         by_name[rel.sub.text].append(rel)
 
-    return [join_names_as_contexts(rel) for rel in by_name.values()]
-
-
-def join_names_as_contexts(relations: list[Relation]) -> Context:
-    assert len(set(rel.sub.text for rel in relations)) == 1, [
-        rel.sub.text for rel in relations
-    ]
-
-    rel_obj: list[tuple[WithEmb, WithEmb]] = [(rel.rel, rel.obj) for rel in relations]
-    unique_rel_obj: list[tuple[WithEmb, WithEmb]] = []
-    existed: set[tuple[str, str]] = set()
-
-    for rel, obj in rel_obj:
-        if (rel.text, obj.text) in existed:
-            continue
-
-        existed.add((rel.text, obj.text))
-        unique_rel_obj.append((rel, obj))
-
-    return Context(sub=relations[0].sub, rel_obj_set=unique_rel_obj)
+    return [Context.from_relations(rel) for rel in by_name.values()]
