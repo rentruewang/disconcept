@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import NamedTuple, Protocol, TypeVar, runtime_checkable
+import typing
+from typing import NamedTuple, Protocol, TypeVar
 
 from numpy import ndarray
 from numpy.typing import NDArray
@@ -9,12 +10,12 @@ from sentence_transformers import SentenceTransformer  # type: ignore
 T = TypeVar("T")
 
 
-@runtime_checkable
+@typing.runtime_checkable
 class Subject(Protocol[T]):
     sub: T
 
 
-@runtime_checkable
+@typing.runtime_checkable
 class Related(Protocol[T]):
     rel: T
     obj: T

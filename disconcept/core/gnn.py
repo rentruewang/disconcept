@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import collections
 import functools
-from typing import Dict, NamedTuple
+from typing import NamedTuple
 
 import alive_progress as prog
 import loguru
@@ -107,7 +107,7 @@ class Graph:
 
         return np.array(edges)
 
-    def group_index(self, assignment: Dict[str, int]):
+    def group_index(self, assignment: dict[str, int]):
         idx_group_mapping = {i: assignment[v] for v, i in self._sub_idx.items()}
         ordered_mapping = [idx_group_mapping[i] for i in range(self.num_subs)]
         return np.concatenate(
@@ -123,7 +123,7 @@ class GnnOutput(NamedTuple):
 
 
 class Gnn(Module):
-    def __init__(self, graph: Graph, assignment: Dict[str, int]) -> None:
+    def __init__(self, graph: Graph, assignment: dict[str, int]) -> None:
         super().__init__()
 
         features = len(set(assignment.values()))
